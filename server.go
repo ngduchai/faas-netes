@@ -17,6 +17,7 @@ import (
 )
 
 func main() {
+	log.Printf("Start faas-netes")
 	// creates the in-cluster config
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -75,6 +76,7 @@ func main() {
 
 	var port int
 	port = cfg.Port
+	log.Printf("Port %d", port)
 
 	bootstrapConfig := bootTypes.FaaSConfig{
 		ReadTimeout:  cfg.ReadTimeout,

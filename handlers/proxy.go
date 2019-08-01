@@ -35,6 +35,8 @@ func MakeProxy(functionNamespace string, timeout time.Duration) http.HandlerFunc
 
 	return func(w http.ResponseWriter, r *http.Request) {
 
+		log.Println("Invoke function")
+
 		if r.Body != nil {
 			defer r.Body.Close()
 		}
@@ -59,6 +61,7 @@ func MakeProxy(functionNamespace string, timeout time.Duration) http.HandlerFunc
 			forwardReq := requests.NewForwardRequest(r.Method, *r.URL)
 
 			url := forwardReq.ToURL(fmt.Sprintf("%s.%s", service, functionNamespace), watchdogPort)
+
 
 			request, _ := http.NewRequest(r.Method, url, r.Body)
 
