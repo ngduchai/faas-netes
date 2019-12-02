@@ -1,5 +1,5 @@
 .PHONY: build local build-arm64 build-armhf push namespaces install install-armhf charts ci-armhf-build ci-armhf-push ci-arm64-build ci-arm64-push
-TAG?=latest
+TAG?=latest-dev
 
 all: build
 

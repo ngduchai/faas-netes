@@ -95,7 +95,7 @@ spec:
             memory: "120Mi"
             cpu: "50m"
             #image: openfaas/faas-netes:0.7.5
-        image: ngduchai/faas-netes:latest
+        image: ngduchai/faas-netes:latest-dev
         imagePullPolicy: 
         env:
         - name: port

@@ -5,15 +5,18 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/openfaas/faas/gateway/requests"
 	apiv1 "k8s.io/api/core/v1"
@@ -114,6 +117,56 @@ func MakeDeployHandler(functionNamespace string, clientset *kubernetes.Clientset
 
 		log.Println("Created deployment - " + request.Service)
 
+		// Make sure reserved replicas are running
+		getopt := metav1.GetOptions{}
+		ready := false
+		dep, err := deploy.Get(request.Service, getopt)
+		if err == nil {
+			numReplicas := *(*dep).Spec.Replicas
+			retries := 2 * numReplicas
+			nochange := 0
+			prevReplicas := int32(0)
+			//for err == nil && retries > 0 && nochange < 40 {
+			for err == nil && retries > 0 {
+				availReplicas := (*dep).Status.AvailableReplicas
+				log.Printf("Deployment [%d]: numReplicas: %d, availReplicas: %d",
+					retries, numReplicas, availReplicas)
+				if availReplicas == numReplicas {
+					ready = true
+					break
+				}
+				if availReplicas > 0 && availReplicas == prevReplicas {
+					nochange++
+				} else {
+					nochange = 0
+				}
+				prevReplicas = availReplicas
+				dep, err = deploy.Get(request.Service, getopt)
+				time.Sleep(time.Duration(1000) * time.Millisecond)
+				retries--
+			}
+			log.Printf("Deploy %s -- retries: %d Requires: %d Avail: %d",
+				request.Service, retries, numReplicas, (*dep).Status.AvailableReplicas)
+		}
+		if !ready {
+			// Rollback deployment
+			//period := int64(0)
+			foregroundPolicy := metav1.DeletePropagationForeground
+			delopt := metav1.DeleteOptions{
+				//GracePeriodSeconds: &period,
+				PropagationPolicy: &foregroundPolicy,
+			}
+			err = deploy.Delete(request.Service, &delopt)
+			if err != nil {
+				log.Println("Can not rollback function deployment")
+			}
+			err = errors.New("Fail to reserve resource")
+			log.Println("Deploy " + request.Service + " " + err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
 		service := clientset.Core().Services(functionNamespace)
 		serviceSpec := makeServiceSpec(request)
 		_, err = service.Create(serviceSpec)
@@ -196,6 +249,13 @@ func makeDeploymentSpec(request requests.CreateFunctionRequest, existingSecrets 
 		}
 		for k, v := range *request.Labels {
 			labels[k] = v
+		}
+		realtime := extractLabelRealValue((*request.Labels)["realtime"], float64(0))
+		size := extractLabelRealValue((*request.Labels)["functionsize"], float64(1.0))
+		duration := extractLabelValue((*request.Labels)["duration"], uint64(60))
+		replicas := int32(math.Ceil(realtime * size * float64(duration)))
+		if replicas > 0 {
+			initialReplicas = &replicas
 		}
 	}
 
@@ -444,6 +504,36 @@ func getMinReplicaCount(labels map[string]string) *int32 {
 	}
 
 	return nil
+}
+
+func extractLabelValue(rawLabelValue string, fallback uint64) uint64 {
+	if len(rawLabelValue) <= 0 {
+		return fallback
+	}
+
+	value, err := strconv.Atoi(rawLabelValue)
+
+	if err != nil {
+		log.Printf("Provided label value %s should be of type uint", rawLabelValue)
+		return fallback
+	}
+
+	return uint64(value)
+}
+
+func extractLabelRealValue(rawLabelValue string, fallback float64) float64 {
+	if len(rawLabelValue) <= 0 {
+		return fallback
+	}
+
+	value, err := strconv.ParseFloat(rawLabelValue, 64)
+
+	if err != nil {
+		log.Printf("Provided label value %s should be of type float", rawLabelValue)
+		return fallback
+	}
+
+	return float64(value)
 }
 
 // configureReadOnlyRootFilesystem will create or update the required settings and mounts to ensure

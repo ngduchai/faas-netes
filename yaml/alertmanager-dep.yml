@@ -23,7 +23,8 @@ spec:
         resources:
           requests:
             memory: "32Mi"
-        image: prom/alertmanager:v0.16.1
+        #image: prom/alertmanager:v0.16.1
+        image: prom/alertmanager:latest
         imagePullPolicy: Always
         command:
           - "alertmanager"

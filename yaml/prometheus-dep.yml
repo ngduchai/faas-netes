@@ -24,7 +24,8 @@ spec:
         resources:
           requests:
             memory: "512Mi"
-        image: prom/prometheus:v2.7.1
+        #image: prom/prometheus:v2.7.1
+        image: prom/prometheus:latest
         command:
           - "prometheus"
           - "--config.file=/etc/prometheus/prometheus.yml"

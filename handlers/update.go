@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 	"time"
 
@@ -60,6 +62,13 @@ func updateDeploymentSpec(
 		return findDeployErr, http.StatusNotFound
 	}
 
+	prevReplicas := deployment.Spec.Replicas
+	numReplicas := *prevReplicas
+
+	prev_realtime := deployment.Labels["realtime"]
+	prev_size := deployment.Labels["functionsize"]
+	prev_duration := deployment.Labels["duration"]
+
 	if len(deployment.Spec.Template.Spec.Containers) > 0 {
 		deployment.Spec.Template.Spec.Containers[0].Image = request.Image
 
@@ -88,6 +97,14 @@ func updateDeploymentSpec(
 			for k, v := range *request.Labels {
 				labels[k] = v
 			}
+			realtime := extractLabelRealValue((*request.Labels)["realtime"], float64(0))
+			size := extractLabelRealValue((*request.Labels)["functionsize"], float64(1.0))
+			duration := extractLabelValue((*request.Labels)["duration"], uint64(60))
+			numReplicas = int32(math.Ceil(realtime * size * float64(duration)))
+			if numReplicas > 0 {
+				deployment.Spec.Replicas = &numReplicas
+			}
+
 		}
 
 		deployment.Labels = labels
@@ -138,6 +155,60 @@ func updateDeploymentSpec(
 		return updateErr, http.StatusInternalServerError
 	}
 
+	// Ensure real-time requirement
+	deploy := clientset.ExtensionsV1beta1().Deployments(functionNamespace)
+	getopt := metav1.GetOptions{}
+	ready := false
+	dep, err := deploy.Get(request.Service, getopt)
+	if err == nil {
+		retries := 2 * numReplicas
+		nochange := 0
+		prevAvailReplicas := int32(0)
+		//for err == nil && retries > 0 && nochange < 40 {
+		for err == nil && retries > 0 {
+			availReplicas := (*dep).Status.AvailableReplicas
+			log.Printf("Update [%d]: numReplicas: %d, availReplicas: %d",
+				retries, numReplicas, availReplicas)
+			if availReplicas == numReplicas {
+				ready = true
+				break
+			}
+			if availReplicas != *prevReplicas && availReplicas == prevAvailReplicas {
+				nochange++
+			} else {
+				nochange = 0
+			}
+			prevAvailReplicas = availReplicas
+			dep, err = deploy.Get(request.Service, getopt)
+			time.Sleep(time.Duration(1000) * time.Millisecond)
+			retries--
+		}
+		log.Printf("Update %s -- retries: %d Requires: %d Avail: %d",
+			request.Service, retries, numReplicas,
+			(*dep).Status.AvailableReplicas)
+	}
+	if !ready {
+		deployment, findDeployErr := clientset.ExtensionsV1beta1().
+			Deployments(functionNamespace).
+			Get(request.Service, getOpts)
+		if findDeployErr != nil {
+			log.Println("Unable to get the function again.")
+			return findDeployErr, http.StatusNotFound
+		}
+		deployment.Spec.Replicas = prevReplicas
+		deployment.Labels["realtime"] = prev_realtime
+		deployment.Labels["functionsize"] = prev_size
+		deployment.Labels["duration"] = prev_duration
+		_, err := clientset.ExtensionsV1beta1().
+			Deployments(functionNamespace).Update(deployment)
+		if err != nil {
+			log.Println("Cannot rollback function update: " + err.Error())
+		}
+		err = errors.New("Fail to reserve resource for new real-time requirement")
+		log.Println("Update " + request.Service + " " + err.Error())
+		return err, http.StatusInternalServerError
+	}
+
 	return nil, http.StatusAccepted
 }
 
@@ -168,3 +239,35 @@ func updateService(
 
 	return nil, http.StatusAccepted
 }
+
+/*
+func extractLabelValue(rawLabelValue string, fallback uint64) uint64 {
+	if len(rawLabelValue) <= 0 {
+		return fallback
+	}
+
+	value, err := strconv.Atoi(rawLabelValue)
+
+	if err != nil {
+		log.Printf("Provided label value %s should be of type uint", rawLabelValue)
+		return fallback
+	}
+
+	return uint64(value)
+}
+
+func extractLabelRealValue(rawLabelValue string, fallback float64) float64 {
+	if len(rawLabelValue) <= 0 {
+		return fallback
+	}
+
+	value, err := strconv.ParseFloat(rawLabelValue, 64)
+
+	if err != nil {
+		log.Printf("Provided label value %s should be of type float", rawLabelValue)
+		return fallback
+	}
+
+	return float64(value)
+}
+*/

@@ -40,6 +40,9 @@ func main() {
 	osEnv := types.OsEnv{}
 	cfg := readConfig.Read(osEnv)
 
+	//cfg.ReadTimeout = 10 * time.Minute
+	//cfg.WriteTimeout = 10 * time.Minute
+
 	log.Printf("HTTP Read Timeout: %s\n", cfg.ReadTimeout)
 	log.Printf("HTTP Write Timeout: %s\n", cfg.WriteTimeout)
 	log.Printf("HTTPProbe: %v\n", cfg.HTTPProbe)
