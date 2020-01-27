@@ -1,7 +1,7 @@
 faas-netes
 ===========
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/openfaas/faas-netes)](https://goreportcard.com/report/github.com/openfaas/faas-netes) [![Build Status](https://travis-ci.org/openfaas/faas-netes.svg?branch=master)](https://travis-ci.org/openfaas/faas-netes)
+[![Go Report Card](https://goreportcard.com/badge/github.com/openfaas/faas-netes)](https://goreportcard.com/report/github.com/openfaas/faas-netes) [![Build Status](https://travis-ci.com/openfaas/faas-netes.svg?branch=master)](https://travis-ci.com/openfaas/faas-netes)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenFaaS](https://img.shields.io/badge/openfaas-serverless-blue.svg)](https://www.openfaas.com)
 
@@ -9,31 +9,28 @@ faas-netes
 
 > OpenFaaS also runs well on managed Kubernetes services like AKS, EKS and GKE. See our list of tutorials in the documentation site for more.
 
-**Watch a video demo from [TechFieldDay Extra at Dockercon](https://www.youtube.com/watch?v=C3agSKv2s_w&list=PLlIapFDp305AiwA17mUNtgi5-u23eHm5j&index=1)**
-
 [OpenFaaS (Functions as a Service)](https://github.com/openfaas/faas) is a framework for building serverless functions with Docker and Kubernetes which has first class support for metrics. Any process can be packaged as a function enabling you to consume a range of web events without repetitive boiler-plate coding.
 
 ![Stack](https://camo.githubusercontent.com/08bc7c0c4f882ef5eadaed797388b27b1a3ca056/68747470733a2f2f7062732e7477696d672e636f6d2f6d656469612f4446726b46344e586f41414a774e322e6a7067)
 
-In this README you'll find a technical overview and instructions for deploying to a Kubernetes cluster. (Docker Swarm is also supported along with Hashicorp Nomad)
+In this README you'll find a technical overview and instructions for deploying to a Kubernetes cluster. 
 
-* Framework for deploying serverless workloads
+* Platform for deploying [serverless-style workloads](https://docs.openfaas.com/reference/workloads/) - microservices and functions
 * Native Kubernetes integrations (API and ecosystem)
-* Built-in UI
+* Built-in UI portal
 * YAML templates & helm chart
-* Over 13.5k GitHub stars
-* Independent open-source project with over 130 contributors
+* Over 19k GitHub stars
+* Independent open-source project with over 240 contributors
 * Operator available to use Custom Resource Definitions (CRDs) [openfaas-operator](https://github.com/openfaas-incubator/openfaas-operator/)
+* OAuth2 / OIDC authz available
 
 ## Get started
 
-* Tutorial: [Deploy on Kubernetes with helm/YAML](https://docs.openfaas.com/deployment)
-* [Visit the website](https://www.openfaas.com)
-* [Join the community](https://docs.openfaas.com/community)
+* Tutorial: [Deploy to Kubernetes with `helm` or YAML](https://docs.openfaas.com/deployment)
+* [Read the blog at openfaas.com](https://www.openfaas.com/blog/)
+* [Join the Slack community](https://docs.openfaas.com/community)
 
-### How is this project different from others?
-
-* [Read an Introduction to OpenFaaS here](https://blog.alexellis.io/introducing-functions-as-a-service/)
+OpenFaaS can form a complete stack for Cloud Native application development called PLONK including: Prometheus, Linux/Linkerd, OpenFaaS, NATS/Nginx and Kubernetes. [Introducing PLONK](https://www.openfaas.com/blog/plonk-stack/).
 
 ## Reference guide
 
@@ -46,7 +43,16 @@ faas-netes can be configured with environment variables, but for a full set of o
 | `httpProbe`         | Boolean - use http probe type for function readiness and liveness. Default: `false`             |
 | `write_timeout`     | HTTP timeout for writing a response body from your function (in seconds). Default: `60s`        |
 | `read_timeout`      | HTTP timeout for reading the payload from the client caller (in seconds). Default: `60s`        |
-| `image_pull_policy` | Image pull policy for deployed functions (`Always`, `IfNotPresent`, `Never`.  Default: `Always` |
+| `image_pull_policy` | Image pull policy for deployed functions (`Always`, `IfNotPresent`, `Never`).  Default: `Always` |
+| `gateway.resources`        | CPU/Memory resources requests/limits (memory: `120Mi`, cpu: `50m`) |
+| `faasnetes.resources`      | CPU/Memory resources requests/limits (memory: `120Mi`, cpu: `50m`) |
+| `operator.resources`       | CPU/Memory resources requests/limits (memory: `120Mi`, cpu: `50m`) |
+| `queueWorker.resources`    | CPU/Memory resources requests/limits (memory: `120Mi`, cpu: `50m`) |
+| `prometheus.resources`     | CPU/Memory resources requests/limits (memory: `512Mi`)             |
+| `alertmanager.resources`   | CPU/Memory resources requests/limits (memory: `25Mi`)              |
+| `nats.resources`           | CPU/Memory resources requests/limits (memory: `120Mi`)             |
+| `faasIdler.resources`      | CPU/Memory resources requests/limits (memory: `64Mi`)              |
+| `basicAuthPlugin.resources`| CPU/Memory resources requests/limits (memory: `50Mi`, cpu: `20m`)  |
 
 ### Readiness checking
 
@@ -69,8 +75,11 @@ In this case, you can set your local environment to [use minikube's docker](http
 
 Note: When set to `Never`, **only** local (or pulled) images will work.  When set to `IfNotPresent`, function deployments may not be updated when using static image tags.
 
+## Kubernetes Versions
 
-## Contributing to faas-netes
+faas-netes maintainers strive to support as many Kubernetes versions as possible and it is currently compatible with Kubernetes 1.11 and higher. Instructions for OpenShift are also available in the documentation.
+
+## Contributing
 
 You can quickly create a standard development environment using
 

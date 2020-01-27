@@ -9,12 +9,16 @@ metadata:
     component: gateway
     heritage: {{ .Release.Service }}
     release: {{ .Release.Name }}
+{{- if .Values.gatewayExternal.annotations }}
+  annotations: {{ toYaml .Values.gatewayExternal.annotations | nindent 4 }}
+{{- end }}
   name: gateway-external
   namespace: {{ .Release.Namespace | quote }}
 spec:
   type: {{ .Values.serviceType }}
   ports:
-    - port: 8080
+    - name: http
+      port: 8080
       protocol: TCP
       targetPort: 8080
       {{- if contains "NodePort" .Values.serviceType }}

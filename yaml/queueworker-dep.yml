@@ -1,5 +1,5 @@
 ---
-apiVersion: apps/v1beta1 # for versions before 1.6.0 use extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
@@ -9,6 +9,9 @@ metadata:
   namespace: "openfaas"
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: queue-worker
   template:
     metadata:
       annotations:
@@ -23,14 +26,21 @@ spec:
       containers:
       - name:  queue-worker
         resources:
-          requests:
-            memory: "120Mi"
-            cpu: "50m"
-        image: openfaas/queue-worker:0.7.2
+            requests:
+              cpu: 50m
+              memory: 120Mi
+            
+        image: openfaas/queue-worker:0.9.0
         imagePullPolicy: Always
         env:
         - name: faas_nats_address
           value: "nats.openfaas.svc.cluster.local"
+        - name: faas_nats_durable_queue_subscription
+          value: "false"
+        - name: faas_nats_channel
+          value: "faas-request"
+        - name: faas_nats_queue_group
+          value: "faas"
         - name: faas_gateway_address
           value: "gateway.openfaas.svc.cluster.local"
         - name: "gateway_invoke"
@@ -47,3 +57,6 @@ spec:
         - name: auth
           readOnly: true
           mountPath: "/var/secrets"
+      nodeSelector:
+        beta.kubernetes.io/arch: amd64
+        

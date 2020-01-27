@@ -1,3 +1,6 @@
+// Copyright 2019 OpenFaaS Author(s)
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
 package handlers
 
 import (
@@ -21,7 +24,7 @@ func MakeInfoHandler(version, sha string) http.HandlerFunc {
 			defer r.Body.Close()
 		}
 
-		infoRequest := types.InfoRequest{
+		infoResponse := types.InfoResponse{
 			Orchestration: OrchestrationIdentifier,
 			Provider:      ProviderName,
 			Version: types.ProviderVersion{
@@ -30,7 +33,7 @@ func MakeInfoHandler(version, sha string) http.HandlerFunc {
 			},
 		}
 
-		jsonOut, marshalErr := json.Marshal(infoRequest)
+		jsonOut, marshalErr := json.Marshal(infoResponse)
 		if marshalErr != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return

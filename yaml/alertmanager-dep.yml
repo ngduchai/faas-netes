@@ -1,6 +1,6 @@
 ---
 ---
-apiVersion: apps/v1beta1 # for versions before 1.6.0 use extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
@@ -10,53 +10,45 @@ metadata:
   namespace: "openfaas"
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
   template:
     metadata:
       labels:
         app: alertmanager
       annotations:
-        sidecar.istio.io/inject: "false"
-        checksum/alertmanager-config: "88b3a8dc6475fea9507a7b2ce9e62d62ebf711ab6b1860d9e4f8064eed5d7357"
+        sidecar.istio.io/inject: "true"
+        checksum/alertmanager-config: "98f8fe30093968192c80ba89a070e79be1f61dde65b36bed4703cf371772fd3f"
     spec:
       containers:
       - name: alertmanager
-        resources:
-          requests:
-            memory: "32Mi"
-        image: prom/alertmanager:v0.16.1
+        image: prom/alertmanager:v0.18.0
         imagePullPolicy: Always
         command:
           - "alertmanager"
           - "--config.file=/alertmanager.yml"
           - "--storage.path=/alertmanager"
+          - "--cluster.listen-address="
         livenessProbe:
-          exec:
-            command:
-            - wget
-            - --quiet
-            - --tries=1
-            - --timeout=30
-            - --spider
-            - http://localhost:9093/-/ready
+          httpGet:
+            path: /-/ready
+            port: 9093
           timeoutSeconds: 30
         readinessProbe:
-          exec:
-            command:
-            - wget
-            - --quiet
-            - --tries=1
-            - --timeout=30
-            - --spider
-            - http://localhost:9093/-/ready
+          httpGet:
+            path: /-/ready
+            port: 9093
           timeoutSeconds: 30
         ports:
         - containerPort: 9093
           protocol: TCP
         resources:
-          requests:
-            memory: 25Mi
-          limits:
-            memory: 50Mi
+            limits:
+              memory: 50Mi
+            requests:
+              memory: 25Mi
+            
         volumeMounts:
         - mountPath: /alertmanager.yml
           name: alertmanager-config
@@ -75,3 +67,6 @@ spec:
         - name: auth
           secret:
             secretName: basic-auth
+      nodeSelector:
+        beta.kubernetes.io/arch: amd64
+        

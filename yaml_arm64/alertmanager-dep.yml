@@ -1,35 +1,61 @@
-apiVersion: apps/v1beta1
+---
+---
+apiVersion: apps/v1
 kind: Deployment
 metadata:
+  labels:
+    app: openfaas
+    component: alertmanager
   name: alertmanager
-  namespace: openfaas
+  namespace: "openfaas"
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
   template:
     metadata:
       labels:
         app: alertmanager
+      annotations:
+        sidecar.istio.io/inject: "true"
+        checksum/alertmanager-config: "98f8fe30093968192c80ba89a070e79be1f61dde65b36bed4703cf371772fd3f"
     spec:
       containers:
       - name: alertmanager
-        image: functions/alertmanager:0.15.0-rc.0-arm64
+        image: prom/alertmanager:v0.18.0
         imagePullPolicy: Always
-        command: 
+        command:
           - "alertmanager"
           - "--config.file=/alertmanager.yml"
           - "--storage.path=/alertmanager"
+          - "--cluster.listen-address="
+        livenessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9093
+          timeoutSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9093
+          timeoutSeconds: 30
         ports:
-        - containerPort: 9003
+        - containerPort: 9093
           protocol: TCP
         resources:
-          requests:
-            memory: 25Mi
-          limits:
-            memory: 50Mi
+            limits:
+              memory: 50Mi
+            requests:
+              memory: 25Mi
+            
         volumeMounts:
         - mountPath: /alertmanager.yml
           name: alertmanager-config
           subPath: alertmanager.yml
+        - name: auth
+          readOnly: true
+          mountPath: "/var/secrets"
       volumes:
         - name: alertmanager-config
           configMap:
@@ -38,3 +64,9 @@ spec:
               - key: alertmanager.yml
                 path: alertmanager.yml
                 mode: 0644
+        - name: auth
+          secret:
+            secretName: basic-auth
+      nodeSelector:
+        beta.kubernetes.io/arch: arm64
+        

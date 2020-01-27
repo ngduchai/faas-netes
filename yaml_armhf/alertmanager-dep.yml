@@ -1,31 +1,54 @@
-apiVersion: apps/v1beta1
+---
+---
+apiVersion: apps/v1
 kind: Deployment
 metadata:
+  labels:
+    app: openfaas
+    component: alertmanager
   name: alertmanager
-  namespace: openfaas
+  namespace: "openfaas"
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
   template:
     metadata:
       labels:
         app: alertmanager
+      annotations:
+        sidecar.istio.io/inject: "true"
+        checksum/alertmanager-config: "c5ababa6eaea12e0a4ba5aa0a26bbf0396e588c1dfad5c1ab976fd129d8060ad"
     spec:
       containers:
       - name: alertmanager
-        image: functions/alertmanager:0.15.0-rc.0-armhf
+        image: prom/alertmanager:v0.18.0
         imagePullPolicy: Always
-        command: 
+        command:
           - "alertmanager"
           - "--config.file=/alertmanager.yml"
           - "--storage.path=/alertmanager"
+          - "--cluster.listen-address="
+        livenessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9093
+          timeoutSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9093
+          timeoutSeconds: 30
         ports:
-        - containerPort: 9003
+        - containerPort: 9093
           protocol: TCP
         resources:
-          requests:
-            memory: 25Mi
-          limits:
-            memory: 50Mi
+            limits:
+              memory: 50Mi
+            requests:
+              memory: 25Mi
+            
         volumeMounts:
         - mountPath: /alertmanager.yml
           name: alertmanager-config
@@ -38,3 +61,6 @@ spec:
               - key: alertmanager.yml
                 path: alertmanager.yml
                 mode: 0644
+      nodeSelector:
+        beta.kubernetes.io/arch: arm
+        
