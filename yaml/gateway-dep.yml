@@ -100,7 +100,7 @@ spec:
               memory: 120Mi
             
             #image: openfaas/faas-netes:0.9.15
-        image: ngduchai/faas-netes:latest
+        image: ngduchai/faas-netes:latest-dev
         imagePullPolicy: 
         securityContext:
           readOnlyRootFilesystem: true

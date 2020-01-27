@@ -59,6 +59,7 @@ func main() {
 		log.Fatalf("Error reading config: %s", err.Error())
 	}
 
+	log.Printf("RTS bare-netes\n")
 	log.Printf("HTTP Read Timeout: %s\n", cfg.FaaSConfig.GetReadTimeout())
 	log.Printf("HTTP Write Timeout: %s\n", cfg.FaaSConfig.WriteTimeout)
 	log.Printf("HTTPProbe: %v\n", cfg.HTTPProbe)
