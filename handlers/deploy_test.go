@@ -1,137 +1,20 @@
+// Copyright 2019 OpenFaaS Author(s)
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
 package handlers
 
 import (
 	"testing"
 
-	"github.com/openfaas/faas/gateway/requests"
+	"github.com/openfaas/faas-netes/k8s"
+	types "github.com/openfaas/faas-provider/types"
+	"k8s.io/client-go/kubernetes/fake"
+
 	apiv1 "k8s.io/api/core/v1"
-	v1beta1 "k8s.io/api/extensions/v1beta1"
 )
 
-func Test_configureReadOnlyRootFilesystem_Disabled_To_Disabled(t *testing.T) {
-	deployment := &v1beta1.Deployment{
-		Spec: v1beta1.DeploymentSpec{
-			Template: apiv1.PodTemplateSpec{
-				Spec: apiv1.PodSpec{
-					Containers: []apiv1.Container{
-						{Name: "testfunc", Image: "alpine:latest"},
-					},
-				},
-			},
-		},
-	}
-
-	request := requests.CreateFunctionRequest{
-		Service:                "testfunc",
-		ReadOnlyRootFilesystem: false,
-	}
-
-	configureReadOnlyRootFilesystem(request, deployment)
-	readOnlyRootDisabled(t, deployment)
-}
-
-func Test_configureReadOnlyRootFilesystem_Disabled_To_Enabled(t *testing.T) {
-	deployment := &v1beta1.Deployment{
-		Spec: v1beta1.DeploymentSpec{
-			Template: apiv1.PodTemplateSpec{
-				Spec: apiv1.PodSpec{
-					Containers: []apiv1.Container{
-						{Name: "testfunc", Image: "alpine:latest"},
-					},
-				},
-			},
-		},
-	}
-
-	request := requests.CreateFunctionRequest{
-		Service:                "testfunc",
-		ReadOnlyRootFilesystem: true,
-	}
-
-	configureReadOnlyRootFilesystem(request, deployment)
-	readOnlyRootEnabled(t, deployment)
-}
-
-func Test_configureReadOnlyRootFilesystem_Enabled_To_Disabled(t *testing.T) {
-	trueValue := true
-	deployment := &v1beta1.Deployment{
-		Spec: v1beta1.DeploymentSpec{
-			Template: apiv1.PodTemplateSpec{
-				Spec: apiv1.PodSpec{
-					Containers: []apiv1.Container{
-						{
-							Name:  "testfunc",
-							Image: "alpine:latest",
-							SecurityContext: &apiv1.SecurityContext{
-								ReadOnlyRootFilesystem: &trueValue,
-							},
-							VolumeMounts: []apiv1.VolumeMount{
-								{Name: "temp", MountPath: "/tmp", ReadOnly: false},
-							},
-						},
-					},
-					Volumes: []apiv1.Volume{
-						{
-							Name: "temp",
-							VolumeSource: apiv1.VolumeSource{
-								EmptyDir: &apiv1.EmptyDirVolumeSource{},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	request := requests.CreateFunctionRequest{
-		Service:                "testfunc",
-		ReadOnlyRootFilesystem: false,
-	}
-	configureReadOnlyRootFilesystem(request, deployment)
-	readOnlyRootDisabled(t, deployment)
-}
-
-func Test_configureReadOnlyRootFilesystem_Enabled_To_Enabled(t *testing.T) {
-	trueValue := true
-	deployment := &v1beta1.Deployment{
-		Spec: v1beta1.DeploymentSpec{
-			Template: apiv1.PodTemplateSpec{
-				Spec: apiv1.PodSpec{
-					Containers: []apiv1.Container{
-						{
-							Name:  "testfunc",
-							Image: "alpine:latest",
-							SecurityContext: &apiv1.SecurityContext{
-								ReadOnlyRootFilesystem: &trueValue,
-							},
-							VolumeMounts: []apiv1.VolumeMount{
-								{Name: "temp", MountPath: "/tmp", ReadOnly: false},
-							},
-						},
-					},
-					Volumes: []apiv1.Volume{
-						{
-							Name: "temp",
-							VolumeSource: apiv1.VolumeSource{
-								EmptyDir: &apiv1.EmptyDirVolumeSource{},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	request := requests.CreateFunctionRequest{
-		Service:                "testfunc",
-		ReadOnlyRootFilesystem: true,
-	}
-	configureReadOnlyRootFilesystem(request, deployment)
-	readOnlyRootEnabled(t, deployment)
-}
-
 func Test_buildAnnotations_Empty_In_CreateRequest(t *testing.T) {
-	request := requests.CreateFunctionRequest{}
+	request := types.FunctionDeployment{}
 
 	annotations := buildAnnotations(request)
 
@@ -150,7 +33,7 @@ func Test_buildAnnotations_Empty_In_CreateRequest(t *testing.T) {
 }
 
 func Test_buildAnnotations_From_CreateRequest(t *testing.T) {
-	request := requests.CreateFunctionRequest{
+	request := types.FunctionDeployment{
 		Annotations: &map[string]string{
 			"date-created": "Wed 25 Jul 21:26:22 BST 2018",
 			"foo":          "bar",
@@ -173,97 +56,6 @@ func Test_buildAnnotations_From_CreateRequest(t *testing.T) {
 	}
 }
 
-func readOnlyRootDisabled(t *testing.T, deployment *v1beta1.Deployment) {
-	if len(deployment.Spec.Template.Spec.Volumes) != 0 {
-		t.Error("Volumes should be empty if ReadOnlyRootFilesystem is false")
-	}
-
-	if len(deployment.Spec.Template.Spec.Containers[0].VolumeMounts) != 0 {
-		t.Error("VolumeMounts should be empty if ReadOnlyRootFilesystem is false")
-	}
-	functionContatiner := deployment.Spec.Template.Spec.Containers[0]
-
-	if functionContatiner.SecurityContext != nil {
-		if *functionContatiner.SecurityContext.ReadOnlyRootFilesystem != false {
-			t.Error("ReadOnlyRootFilesystem should be false on the container SecurityContext")
-		}
-	}
-}
-
-func readOnlyRootEnabled(t *testing.T, deployment *v1beta1.Deployment) {
-	if len(deployment.Spec.Template.Spec.Volumes) != 1 {
-		t.Error("should create a single tmp Volume")
-	}
-
-	if len(deployment.Spec.Template.Spec.Containers[0].VolumeMounts) != 1 {
-		t.Error("should create a single tmp VolumeMount")
-	}
-
-	volume := deployment.Spec.Template.Spec.Volumes[0]
-	if volume.Name != "temp" {
-		t.Error("volume should be named temp")
-	}
-
-	mount := deployment.Spec.Template.Spec.Containers[0].VolumeMounts[0]
-	if mount.Name != "temp" {
-		t.Error("volume mount should be named temp")
-	}
-
-	if mount.MountPath != "/tmp" {
-		t.Error("temp volume should be mounted to /tmp")
-	}
-
-	if mount.ReadOnly {
-		t.Errorf("temp mount should not read only")
-	}
-
-	if deployment.Spec.Template.Spec.Containers[0].SecurityContext == nil {
-		t.Error("container security context should not be nil")
-	}
-
-	if *deployment.Spec.Template.Spec.Containers[0].SecurityContext.ReadOnlyRootFilesystem != true {
-		t.Error("should set ReadOnlyRootFilesystem to true on the container SecurityContext")
-	}
-}
-
-func Test_makeProbes_useExec(t *testing.T) {
-	cfg := DeployHandlerConfig{
-		HTTPProbe:                    false,
-		FunctionLivenessProbeConfig:  &FunctionProbeConfig{},
-		FunctionReadinessProbeConfig: &FunctionProbeConfig{},
-	}
-
-	probes := makeProbes(&cfg)
-
-	if probes.Readiness.Exec == nil {
-		t.Errorf("Readiness probe should have had exec handler")
-		t.Fail()
-	}
-	if probes.Liveness.Exec == nil {
-		t.Errorf("Liveness probe should have had exec handler")
-		t.Fail()
-	}
-}
-
-func Test_makeProbes_useHTTPProbe(t *testing.T) {
-	cfg := DeployHandlerConfig{
-		HTTPProbe:                    true,
-		FunctionLivenessProbeConfig:  &FunctionProbeConfig{},
-		FunctionReadinessProbeConfig: &FunctionProbeConfig{},
-	}
-
-	probes := makeProbes(&cfg)
-
-	if probes.Readiness.HTTPGet == nil {
-		t.Errorf("Readiness probe should have had HTTPGet handler")
-		t.Fail()
-	}
-	if probes.Liveness.HTTPGet == nil {
-		t.Errorf("Liveness probe should have had HTTPGet handler")
-		t.Fail()
-	}
-}
-
 func Test_SetNonRootUser(t *testing.T) {
 
 	scenarios := []struct {
@@ -276,13 +68,13 @@ func Test_SetNonRootUser(t *testing.T) {
 
 	for _, s := range scenarios {
 		t.Run(s.name, func(t *testing.T) {
-			request := requests.CreateFunctionRequest{Service: "testfunc", Image: "alpine:latest"}
-			cfg := &DeployHandlerConfig{
-				FunctionLivenessProbeConfig:  &FunctionProbeConfig{},
-				FunctionReadinessProbeConfig: &FunctionProbeConfig{},
-				SetNonRootUser:               s.setNonRoot,
-			}
-			deployment, err := makeDeploymentSpec(request, map[string]*apiv1.Secret{}, cfg)
+			request := types.FunctionDeployment{Service: "testfunc", Image: "alpine:latest"}
+			factory := k8s.NewFunctionFactory(fake.NewSimpleClientset(), k8s.DeploymentConfig{
+				LivenessProbe:  &k8s.ProbeConfig{},
+				ReadinessProbe: &k8s.ProbeConfig{},
+				SetNonRootUser: s.setNonRoot,
+			})
+			deployment, err := makeDeploymentSpec(request, map[string]*apiv1.Secret{}, factory)
 			if err != nil {
 				t.Errorf("unexpected makeDeploymentSpec error: %s", err.Error())
 			}
@@ -296,10 +88,87 @@ func Test_SetNonRootUser(t *testing.T) {
 				t.Errorf("expected RunAsUser to be nil, got %d", functionContainer.SecurityContext.RunAsUser)
 			}
 
-			if s.setNonRoot && *functionContainer.SecurityContext.RunAsUser != nonRootFunctionuserID {
-				t.Errorf("expected RunAsUser to be %d, got %d", nonRootFunctionuserID, functionContainer.SecurityContext.RunAsUser)
+			if s.setNonRoot && *functionContainer.SecurityContext.RunAsUser != k8s.SecurityContextUserID {
+				t.Errorf("expected RunAsUser to be %d, got %d", k8s.SecurityContextUserID, functionContainer.SecurityContext.RunAsUser)
 			}
 		})
 	}
 
+}
+
+func Test_buildEnvVars_NoSortedKeys(t *testing.T) {
+
+	inputEnvs := map[string]string{}
+
+	function := types.FunctionDeployment{
+		EnvVars: inputEnvs,
+	}
+
+	coreEnvs := buildEnvVars(&function)
+
+	if len(coreEnvs) != 0 {
+		t.Errorf("want: %d env-vars, got: %d", 0, len(coreEnvs))
+		t.Fail()
+	}
+}
+
+func Test_buildEnvVars_TwoSortedKeys(t *testing.T) {
+	firstKey := "first"
+	lastKey := "last"
+
+	inputEnvs := map[string]string{
+		lastKey:  "",
+		firstKey: "",
+	}
+
+	function := types.FunctionDeployment{
+		EnvVars: inputEnvs,
+	}
+
+	coreEnvs := buildEnvVars(&function)
+
+	if coreEnvs[0].Name != firstKey {
+		t.Errorf("first want: %s, got: %s", firstKey, coreEnvs[0].Name)
+		t.Fail()
+	}
+}
+
+func Test_buildEnvVars_FourSortedKeys(t *testing.T) {
+	firstKey := "alex"
+	secondKey := "elliot"
+	thirdKey := "stefan"
+	lastKey := "zane"
+
+	inputEnvs := map[string]string{
+		lastKey:   "",
+		firstKey:  "",
+		thirdKey:  "",
+		secondKey: "",
+	}
+
+	function := types.FunctionDeployment{
+		EnvVars: inputEnvs,
+	}
+
+	coreEnvs := buildEnvVars(&function)
+
+	if coreEnvs[0].Name != firstKey {
+		t.Errorf("first want: %s, got: %s", firstKey, coreEnvs[0].Name)
+		t.Fail()
+	}
+
+	if coreEnvs[1].Name != secondKey {
+		t.Errorf("second want: %s, got: %s", secondKey, coreEnvs[1].Name)
+		t.Fail()
+	}
+
+	if coreEnvs[2].Name != thirdKey {
+		t.Errorf("third want: %s, got: %s", thirdKey, coreEnvs[2].Name)
+		t.Fail()
+	}
+
+	if coreEnvs[3].Name != lastKey {
+		t.Errorf("last want: %s, got: %s", lastKey, coreEnvs[3].Name)
+		t.Fail()
+	}
 }

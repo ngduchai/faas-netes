@@ -1,7 +1,7 @@
 {{- $functionNs := default .Release.Namespace .Values.functionNamespace }}
 {{- if .Values.prometheus.create }}
 ---
-apiVersion: apps/v1beta1 # for versions before 1.6.0 use extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
@@ -14,26 +14,33 @@ metadata:
   namespace: {{ .Release.Namespace | quote }}
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
   template:
     metadata:
       labels:
         app: prometheus
       annotations:
-        sidecar.istio.io/inject: "false"
+        sidecar.istio.io/inject: "true"
         checksum/prometheus-config: {{ include (print $.Template.BasePath "/prometheus-cfg.yaml") . | sha256sum | quote }}
     spec:
       serviceAccountName: {{ .Release.Name }}-prometheus
       containers:
       - name: prometheus
         resources:
-          requests:
-            memory: "512Mi"
+          {{- .Values.prometheus.resources | toYaml | nindent 12 }}
         image: {{ .Values.prometheus.image }}
         command:
           - "prometheus"
           - "--config.file=/etc/prometheus/prometheus.yml"
         imagePullPolicy: {{ .Values.openfaasImagePullPolicy }}
         livenessProbe:
+          {{- if .Values.httpProbe }}
+          httpGet:
+            path: /-/healthy
+            port: 9090
+          {{- else }}
           exec:
             command:
             - wget
@@ -42,8 +49,14 @@ spec:
             - --timeout=30
             - --spider
             - http://localhost:9090/-/healthy
+          {{- end }}
           timeoutSeconds: 30
         readinessProbe:
+          {{- if .Values.httpProbe }}
+          httpGet:
+            path: /-/healthy
+            port: 9090
+          {{- else }}
           exec:
             command:
             - wget
@@ -52,6 +65,7 @@ spec:
             - --timeout=30
             - --spider
             - http://localhost:9090/-/healthy
+          {{- end }}
           timeoutSeconds: 30
         ports:
         - containerPort: 9090

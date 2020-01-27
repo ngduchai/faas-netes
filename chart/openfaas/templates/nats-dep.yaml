@@ -1,5 +1,5 @@
-{{- if .Values.async }}
-apiVersion: apps/v1beta1 # for versions before 1.6.0 use extensions/v1beta1
+{{- if and .Values.async (not .Values.nats.external.enabled) }}
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
@@ -12,6 +12,9 @@ metadata:
   namespace: {{ .Release.Namespace | quote }}
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: nats
   template:
     metadata:
       annotations:
@@ -23,8 +26,7 @@ spec:
       containers:
       - name:  nats
         resources:
-          requests:
-            memory: "120Mi"
+          {{- .Values.nats.resources | toYaml | nindent 12 }}
         image: {{ .Values.nats.image }}
         imagePullPolicy: {{ .Values.openfaasImagePullPolicy }}
         ports:

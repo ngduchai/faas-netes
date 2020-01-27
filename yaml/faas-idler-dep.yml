@@ -1,6 +1,6 @@
 ---
 ---
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: faas-idler
@@ -10,6 +10,9 @@ metadata:
     component: faas-idler
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: faas-idler
   template:
     metadata:
       annotations:
@@ -21,8 +24,9 @@ spec:
         - name: faas-idler
           resources:
             requests:
-              memory: "64Mi"
-          image: openfaas/faas-idler:0.1.9
+              memory: 64Mi
+            
+          image: openfaas/faas-idler:0.2.1
           imagePullPolicy: Always
           env:
             - name: gateway_url
@@ -32,9 +36,9 @@ spec:
             - name: prometheus_port
               value: "9090"
             - name: inactivity_duration
-              value: 15m
+              value: 30m
             - name: reconcile_interval
-              value: 1m
+              value: 2m
           command:
             - /home/app/faas-idler
             - -dry-run=true
@@ -46,3 +50,6 @@ spec:
         - name: auth
           secret:
             secretName: basic-auth
+      nodeSelector:
+        beta.kubernetes.io/arch: amd64
+        

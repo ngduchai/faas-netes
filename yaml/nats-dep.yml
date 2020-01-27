@@ -1,5 +1,5 @@
 ---
-apiVersion: apps/v1beta1 # for versions before 1.6.0 use extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
@@ -9,6 +9,9 @@ metadata:
   namespace: "openfaas"
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: nats
   template:
     metadata:
       annotations:
@@ -20,8 +23,9 @@ spec:
       containers:
       - name:  nats
         resources:
-          requests:
-            memory: "120Mi"
+            requests:
+              memory: 120Mi
+            
         image: nats-streaming:0.11.2
         imagePullPolicy: Always
         ports:
@@ -33,3 +37,6 @@ spec:
           - memory
           - --cluster_id
           - faas-cluster
+      nodeSelector:
+        beta.kubernetes.io/arch: amd64
+        

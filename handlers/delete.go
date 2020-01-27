@@ -5,20 +5,35 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 
 	"github.com/openfaas/faas/gateway/requests"
-	v1beta1 "k8s.io/api/extensions/v1beta1"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
 // MakeDeleteHandler delete a function
-func MakeDeleteHandler(functionNamespace string, clientset *kubernetes.Clientset) http.HandlerFunc {
+func MakeDeleteHandler(defaultNamespace string, clientset *kubernetes.Clientset) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
+
+		q := r.URL.Query()
+		namespace := q.Get("namespace")
+
+		lookupNamespace := defaultNamespace
+
+		if len(namespace) > 0 {
+			lookupNamespace = namespace
+		}
+
+		if lookupNamespace == "kube-system" {
+			http.Error(w, "unable to list within the kube-system namespace", http.StatusUnauthorized)
+			return
+		}
 
 		body, _ := ioutil.ReadAll(r.Body)
 
@@ -31,13 +46,14 @@ func MakeDeleteHandler(functionNamespace string, clientset *kubernetes.Clientset
 
 		if len(request.FunctionName) == 0 {
 			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
 
 		getOpts := metav1.GetOptions{}
 
 		// This makes sure we don't delete non-labelled deployments
-		deployment, findDeployErr := clientset.ExtensionsV1beta1().
-			Deployments(functionNamespace).
+		deployment, findDeployErr := clientset.AppsV1().
+			Deployments(lookupNamespace).
 			Get(request.FunctionName, getOpts)
 
 		if findDeployErr != nil {
@@ -52,7 +68,10 @@ func MakeDeleteHandler(functionNamespace string, clientset *kubernetes.Clientset
 		}
 
 		if isFunction(deployment) {
-			deleteFunction(functionNamespace, clientset, request, w)
+			err := deleteFunction(lookupNamespace, clientset, request, w)
+			if err != nil {
+				return
+			}
 		} else {
 			w.WriteHeader(http.StatusBadRequest)
 
@@ -61,10 +80,11 @@ func MakeDeleteHandler(functionNamespace string, clientset *kubernetes.Clientset
 		}
 
 		w.WriteHeader(http.StatusAccepted)
+		return
 	}
 }
 
-func isFunction(deployment *v1beta1.Deployment) bool {
+func isFunction(deployment *appsv1.Deployment) bool {
 	if deployment != nil {
 		if _, found := deployment.Labels["faas_function"]; found {
 			return true
@@ -73,12 +93,11 @@ func isFunction(deployment *v1beta1.Deployment) bool {
 	return false
 }
 
-func deleteFunction(functionNamespace string, clientset *kubernetes.Clientset, request requests.DeleteFunctionRequest, w http.ResponseWriter) {
+func deleteFunction(functionNamespace string, clientset *kubernetes.Clientset, request requests.DeleteFunctionRequest, w http.ResponseWriter) error {
 	foregroundPolicy := metav1.DeletePropagationForeground
 	opts := &metav1.DeleteOptions{PropagationPolicy: &foregroundPolicy}
 
-	if deployErr := clientset.ExtensionsV1beta1().
-		Deployments(functionNamespace).
+	if deployErr := clientset.Apps().Deployments(functionNamespace).
 		Delete(request.FunctionName, opts); deployErr != nil {
 
 		if errors.IsNotFound(deployErr) {
@@ -87,7 +106,7 @@ func deleteFunction(functionNamespace string, clientset *kubernetes.Clientset, r
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		w.Write([]byte(deployErr.Error()))
-		return
+		return fmt.Errorf("error deleting function's deployment")
 	}
 
 	if svcErr := clientset.CoreV1().
@@ -101,6 +120,7 @@ func deleteFunction(functionNamespace string, clientset *kubernetes.Clientset, r
 		}
 
 		w.Write([]byte(svcErr.Error()))
-		return
+		return fmt.Errorf("error deleting function's service")
 	}
+	return nil
 }

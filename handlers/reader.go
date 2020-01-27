@@ -9,18 +9,33 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/openfaas/faas/gateway/requests"
-	v1beta1 "k8s.io/api/extensions/v1beta1"
+	types "github.com/openfaas/faas-provider/types"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/openfaas/faas-netes/k8s"
 )
 
 // MakeFunctionReader handler for reading functions deployed in the cluster as deployments.
-func MakeFunctionReader(functionNamespace string, clientset *kubernetes.Clientset) http.HandlerFunc {
+func MakeFunctionReader(defaultNamespace string, clientset *kubernetes.Clientset) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
-		functions, err := getServiceList(functionNamespace, clientset)
+		q := r.URL.Query()
+		namespace := q.Get("namespace")
+
+		lookupNamespace := defaultNamespace
+
+		if len(namespace) > 0 {
+			lookupNamespace = namespace
+		}
+
+		if lookupNamespace == "kube-system" {
+			http.Error(w, "unable to list within the kube-system namespace", http.StatusUnauthorized)
+			return
+		}
+
+		functions, err := getServiceList(lookupNamespace, clientset)
 		if err != nil {
 			log.Println(err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -35,21 +50,21 @@ func MakeFunctionReader(functionNamespace string, clientset *kubernetes.Clientse
 	}
 }
 
-func getServiceList(functionNamespace string, clientset *kubernetes.Clientset) ([]requests.Function, error) {
-	functions := []requests.Function{}
+func getServiceList(functionNamespace string, clientset *kubernetes.Clientset) ([]types.FunctionStatus, error) {
+	functions := []types.FunctionStatus{}
 
 	listOpts := metav1.ListOptions{
 		LabelSelector: "faas_function",
 	}
 
-	res, err := clientset.ExtensionsV1beta1().Deployments(functionNamespace).List(listOpts)
+	res, err := clientset.AppsV1().Deployments(functionNamespace).List(listOpts)
 
 	if err != nil {
 		return nil, err
 	}
 
 	for _, item := range res.Items {
-		function := readFunction(item)
+		function := k8s.AsFunctionStatus(item)
 		if function != nil {
 			functions = append(functions, *function)
 		}
@@ -58,11 +73,11 @@ func getServiceList(functionNamespace string, clientset *kubernetes.Clientset) (
 }
 
 // getService returns a function/service or nil if not found
-func getService(functionNamespace string, functionName string, clientset *kubernetes.Clientset) (*requests.Function, error) {
+func getService(functionNamespace string, functionName string, clientset *kubernetes.Clientset) (*types.FunctionStatus, error) {
 
 	getOpts := metav1.GetOptions{}
 
-	item, err := clientset.ExtensionsV1beta1().Deployments(functionNamespace).Get(functionName, getOpts)
+	item, err := clientset.AppsV1().Deployments(functionNamespace).Get(functionName, getOpts)
 
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -73,32 +88,11 @@ func getService(functionNamespace string, functionName string, clientset *kubern
 	}
 
 	if item != nil {
-
-		function := readFunction(*item)
+		function := k8s.AsFunctionStatus(*item)
 		if function != nil {
 			return function, nil
 		}
 	}
 
 	return nil, fmt.Errorf("function: %s not found", functionName)
-}
-
-func readFunction(item v1beta1.Deployment) *requests.Function {
-	var replicas uint64
-	if item.Spec.Replicas != nil {
-		replicas = uint64(*item.Spec.Replicas)
-	}
-
-	labels := item.Labels
-	function := requests.Function{
-		Name:              item.Name,
-		Replicas:          replicas,
-		Image:             item.Spec.Template.Spec.Containers[0].Image,
-		AvailableReplicas: uint64(item.Status.AvailableReplicas),
-		InvocationCount:   0,
-		Labels:            &labels,
-		Annotations:       &item.Spec.Template.Annotations,
-	}
-
-	return &function
 }

@@ -30,10 +30,12 @@ install-armhf: namespaces
 	kubectl apply -f yaml_armhf/
 
 charts:
-	cd chart && helm package openfaas/ && helm package kafka-connector/
+	cd chart && helm package openfaas/ && helm package kafka-connector/ && helm package cron-connector/
 	mv chart/*.tgz docs/
 	helm repo index docs --url https://openfaas.github.io/faas-netes/ --merge ./docs/index.yaml
 	./contrib/create-static-manifest.sh
+	./contrib/create-static-manifest.sh ./chart/openfaas ./yaml_arm64 ./chart/openfaas/values-arm64.yaml
+	./contrib/create-static-manifest.sh ./chart/openfaas ./yaml_armhf ./chart/openfaas/values-armhf.yaml
 
 ci-armhf-build:
 	docker build -t openfaas/faas-netes:$(TAG)-armhf . -f Dockerfile.armhf
